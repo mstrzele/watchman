@@ -1,2 +1,13 @@
 package: github.com/mstrzele/watchman
-import: []
+import:
+- package: gopkg.in/alecthomas/kingpin.v2
+  version: ~2.2.5
+- package: github.com/nlopes/slack
+  version: ~0.1.0
+- package: github.com/Sirupsen/logrus
+  version: ~1.0.3
+- package: github.com/robfig/cron
+  version: ~1.0.0
+- package: github.com/google/go-github
+  subpackages:
+  - github
