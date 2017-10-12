@@ -26,7 +26,7 @@ var (
 )
 
 func main() {
-	kingpin.Version("0.1.0")
+	kingpin.Version("0.2.0")
 
 	kingpin.CommandLine.HelpFlag.Short('h')
 	kingpin.CommandLine.VersionFlag.Short('v')
@@ -49,22 +49,24 @@ func main() {
 	client := github.NewClient(nil)
 	ctx := context.Background()
 
+	log.Info("Started")
+
 	cron.AddFunc("*/30 * * * * ?", func() {
-		log.Debug("tick")
+		log.Info("Checking latest relesaes")
 
 		for owner, _ := range users {
 			for repo, _ := range users[owner] {
 				rel, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
-				log.WithFields(log.Fields{
-					"owner": owner,
-					"repo":  repo,
-					"ID":    *rel.ID,
-				}).Debug("Latest release ID")
-
 				if err != nil {
 					log.Error(err)
 					break
 				}
+
+				log.WithFields(log.Fields{
+					"owner":  owner,
+					"repo":   repo,
+					"rel.ID": *rel.ID,
+				}).Debug("Repository checked")
 
 				if latestReleasesIDs[owner][repo] != 0 && latestReleasesIDs[owner][repo] != *rel.ID {
 					log.WithFields(log.Fields{
@@ -72,10 +74,15 @@ func main() {
 						"repo":   repo,
 						"prevID": latestReleasesIDs[owner][repo],
 						"nextID": *rel.ID,
-					}).Debug("Replacing latest release ID")
+					}).Info("Replacing latest release ID")
 
 					latestReleasesIDs[owner][repo] = *rel.ID
 					for _, user := range users[owner][repo] {
+						log.WithFields(log.Fields{
+							"user":  user,
+							"owner": owner,
+							"repo":  repo,
+						}).Info("Notifying")
 						rtm.SendMessage(rtm.NewOutgoingMessage(fmt.Sprintf("hey! new release is available %s!", *rel.HTMLURL), channels[user]))
 					}
 				}
@@ -97,7 +104,6 @@ func main() {
 
 			s := regexp.MustCompile("^((?i)[a-z]+).*(?:[[:blank:]]+|github.com[/:])([[:alnum:]][[:alnum:]-]*[[:alnum:]])/([[:alnum:]-_]+)").FindStringSubmatch(ev.Text)
 			if s == nil {
-				log.Debug(s)
 				break
 			}
 			cmd, owner, repo := strings.ToLower(s[1]), s[2], s[3]
@@ -105,12 +111,6 @@ func main() {
 		Cmd:
 			switch cmd {
 			case "watch":
-				log.WithFields(log.Fields{
-					"user":  user,
-					"owner": owner,
-					"repo":  repo,
-				}).Debug("Watch")
-
 				if users[owner] == nil {
 					users[owner] = make(map[string][]string)
 				}
@@ -123,6 +123,12 @@ func main() {
 
 				users[owner][repo] = append(users[owner][repo], user)
 				rtm.SendMessage(rtm.NewOutgoingMessage(fmt.Sprintf("watching https://github.com/%s/%s for you!", owner, repo), ev.Channel))
+
+				log.WithFields(log.Fields{
+					"user":  user,
+					"owner": owner,
+					"repo":  repo,
+				}).Info("Watch")
 
 				if latestReleasesIDs[owner] == nil {
 					latestReleasesIDs[owner] = make(map[string]int)
@@ -142,12 +148,6 @@ func main() {
 				latestReleasesIDs[owner][repo] = *rel.ID
 
 			case "unwatch":
-				log.WithFields(log.Fields{
-					"user":  user,
-					"owner": owner,
-					"repo":  repo,
-				}).Debug("Unwatch")
-
 				if users[owner] == nil {
 					break Cmd
 				}
@@ -156,6 +156,12 @@ func main() {
 					if v == user {
 						users[owner][repo] = append(users[owner][repo][:i], users[owner][repo][i+1:]...)
 						rtm.SendMessage(rtm.NewOutgoingMessage(fmt.Sprintf("unwatched https://github.com/%s/%s", owner, repo), ev.Channel))
+
+						log.WithFields(log.Fields{
+							"user":  user,
+							"owner": owner,
+							"repo":  repo,
+						}).Info("Unwatch")
 
 						if len(users[owner][repo]) == 0 {
 							delete(users[owner], repo)
